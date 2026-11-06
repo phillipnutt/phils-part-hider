@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.0 (not released yet)
+## 1.0.0 (2026-11-06)
+
+First release.
 
 - Middle-click a part icon in the VAB/SPH parts list to hide it.
 - Hidden parts window, in the look of Phil's Iterative Parts and laid out like
