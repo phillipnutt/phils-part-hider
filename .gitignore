@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.vs/
+# Built at release time, not committed.
+GameData/PhilsPartHider/Plugins/*.dll
+# Each player's own list.
+GameData/PhilsPartHider/PluginData/
+# Release zips.
+*.zip
