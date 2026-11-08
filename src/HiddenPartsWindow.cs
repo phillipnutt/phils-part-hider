@@ -39,9 +39,6 @@ namespace PhilsPartHider
         static string search = "";
         static string category;                 // the selected category's name; null for All
 
-        static readonly HashSet<EditorPartIcon> windowIcons = new HashSet<EditorPartIcon>();
-        public static bool IsWindowIcon(EditorPartIcon icon) => windowIcons.Contains(icon);
-
         // The stock code keeps the icon clipping rectangle in four static fields
         // shared with the parts list; they're put back after clipping ours.
         static readonly FieldInfo[] maskFields = new[] { "minX", "maxX", "minY", "maxY" }
@@ -77,12 +74,12 @@ namespace PhilsPartHider
         Vector2 cell;
         float winW, winH, mainW, gridH;
 
-        int builtVersion = -1;
-        bool dirty;
+        string shownKey;                        // what the grid was last filled for (ViewKey)
+        List<string> missing = new List<string>();  // hidden names with no part installed
+        int installedCount;                     // hidden parts that are installed
         AvailablePart hovered;
         CatButton hoveredCat;
-        string pendingUnhide;
-        bool pendingUndo, pendingUnhideAll, pendingForget, confirmAll;
+        bool confirmAll;
         string undoName;
         int undoIndex;
         float undoUntil;
@@ -231,12 +228,12 @@ namespace PhilsPartHider
             cb.Bar = Ui.Node(root, "Bar").At(1, y + 6, 3, h - 12);
             Ui.Solid(cb.Bar, Look.Amber);
             cb.Btn = Track(Btn.Make(root, c?.Name ?? "All", 8, y, 46, h, () => SelectCategory(cb)).Skin(null, hover, on));
+            cb.Btn.InkOff = Look.Fade(Look.Ink3, 0.4f);
             if (c == null) cb.Btn.WithLabel("All", Look.Display, 14, FontStyle.Bold);
             else if (c.Icon != null) cb.Btn.WithGlyph(c.Icon, Mathf.Min(20, h - 4));
             else cb.Btn.WithLabel(c.Short, Look.Display, 12, FontStyle.Bold);
             cb.Btn.Hover.Changed = over =>
             {
-                cb.Btn.Refresh();
                 if (over) hoveredCat = cb;
                 else if (hoveredCat == cb) hoveredCat = null;
                 ShowTip();
@@ -375,7 +372,7 @@ namespace PhilsPartHider
             Ui.Solid(missingBar, Look.Panel);
             Ui.Solid(Ui.Node(missingBar, "Line").At(0, 0, mainW - 1, 1), Look.Line);
             missingText = Ui.Label(Ui.Node(missingBar, "Text").At(16, 1, mainW - 16 - 110, MissingH - 1), "", Look.Body, 12, Look.Warn);
-            forgetButton = Track(Btn.Make(missingBar, "Forget", mainW - 100, 3, 86, MissingH - 6, () => pendingForget = true)
+            forgetButton = Track(Btn.Make(missingBar, "Forget", mainW - 100, 3, 86, MissingH - 6, Forget)
                 .Colors(Look.Ink2, Look.Ink, Look.Ink).WithLabel("Forget them", Look.Body, 12, align: TextAnchor.MiddleRight));
         }
 
@@ -388,14 +385,14 @@ namespace PhilsPartHider
             infoTitle = Ui.Label(Ui.Node(foot, "InfoTitle").At(16, 11, 300, 20), "", Look.Body, 14, Look.Ink, style: FontStyle.Bold);
             infoSub = Ui.Label(Ui.Node(foot, "InfoSub").At(16, 32, 300, 18), "", Look.Body, 12, Look.Ink3);
             help = Ui.Label(Ui.Node(foot, "Help").At(16, 0, 300, FootH - 1), HelpLine, Look.Body, 13, Look.Ink2);
-            undoButton = Track(Btn.Make(foot, "Undo", 0, 15, 48, 30, () => pendingUndo = true)
+            undoButton = Track(Btn.Make(foot, "Undo", 0, 15, 48, 30, Undo)
                 .Colors(Look.Amber, Look.AmberHover, Look.Amber).WithLabel("Undo", Look.Body, 13, FontStyle.Bold));
 
             Sprite ghost = Look.Round(Look.Panel2, Look.Line2, 7), ghostHover = Look.Round(Look.Panel2, Look.AmberLine, 7);
             float right = mainW - 1 - 14;
             unhideAllButton = Track(Btn.Make(foot, "UnhideAll", right - 106, 14, 106, 34, () => confirmAll = true)
                 .Skin(ghost, ghostHover).Colors(Look.Ink2, Look.Ink, Look.Ink).WithLabel("Unhide all", Look.Body, 13));
-            confirmButton = Track(Btn.Make(foot, "ConfirmAll", right - 96, 14, 96, 34, () => pendingUnhideAll = true)
+            confirmButton = Track(Btn.Make(foot, "ConfirmAll", right - 96, 14, 96, 34, UnhideAll)
                 .Skin(Look.Round(Look.Amber, Look.Amber, 7), Look.Round(Look.AmberHover, Look.AmberHover, 7))
                 .Colors(Look.AmberInk, Look.AmberInk, Look.AmberInk).WithLabel("Unhide all", Look.Display, 14, FontStyle.Bold));
             keepButton = Track(Btn.Make(foot, "Keep", right - 96 - 8 - 100, 14, 100, 34, () => confirmAll = false)
@@ -415,45 +412,12 @@ namespace PhilsPartHider
 
         // ---- Per frame -------------------------------------------------------------
 
+        // Everything the grid shows depends on these; it's filled again when any changes.
+        string ViewKey => $"{HiddenList.Version}|{category}|{sort}|{ascending}|{search}";
+
         public void Update()
         {
-            if (pendingUnhide != null)
-            {
-                string name = pendingUnhide;
-                pendingUnhide = null;
-                int index = HiddenList.IndexOf(name);
-                if (HiddenList.Remove(name))
-                {
-                    PhilsPartHiderAddon.RefreshPartList();
-                    undoName = name;
-                    undoIndex = index;
-                    undoUntil = Time.unscaledTime + UndoSeconds;
-                }
-            }
-            if (pendingUndo)
-            {
-                pendingUndo = false;
-                if (undoName != null && HiddenList.Insert(undoIndex, undoName)) PhilsPartHiderAddon.RefreshPartList();
-                undoName = null;
-            }
-            if (pendingUnhideAll)
-            {
-                pendingUnhideAll = false;
-                confirmAll = false;
-                int n = HiddenList.Count;
-                HiddenList.RemoveAll(HiddenList.Names);
-                undoName = null;
-                PhilsPartHiderAddon.RefreshPartList();
-                ScreenMessages.PostScreenMessage($"All {n} hidden parts are back in the parts list.", 4f, ScreenMessageStyle.UPPER_CENTER);
-            }
-            if (pendingForget)
-            {
-                pendingForget = false;
-                HiddenList.RemoveAll(MissingNames());
-            }
-
-            if (root == null) return;
-            if (builtVersion != HiddenList.Version || dirty) Populate();
+            if (root != null && ViewKey != shownKey) Populate();
         }
 
         public void LateUpdate()
@@ -516,12 +480,20 @@ namespace PhilsPartHider
 
         void Populate()
         {
-            dirty = false;
-            builtVersion = HiddenList.Version;
             ClearTiles();
             if (root == null) return;
 
-            List<AvailablePart> installed = HiddenList.Names.Select(n => PartLoader.getPartInfoByName(n)).Where(ap => ap != null).ToList();
+            // Which hidden parts are installed, and which aren't: worked out here only.
+            var installed = new List<AvailablePart>();
+            missing = new List<string>();
+            foreach (string n in HiddenList.Names)
+            {
+                AvailablePart ap = PartLoader.getPartInfoByName(n);
+                if (ap != null) installed.Add(ap);
+                else missing.Add(n);
+            }
+            installedCount = installed.Count;
+
             categoryOf.Clear();
             foreach (PartCategory c in categories) c.Count = 0;
             foreach (AvailablePart ap in installed)
@@ -532,6 +504,8 @@ namespace PhilsPartHider
                         if (!categoryOf.ContainsKey(ap)) categoryOf[ap] = c.Name;
                     }
             if (category != null && !categories.Any(c => c.Name == category && c.Count > 0)) category = null;
+            // Noted before the tiles are made, so a failure making them isn't retried every frame.
+            shownKey = ViewKey;
 
             List<AvailablePart> shown = Sorted(Filtered(installed));
             EditorPartList list = EditorPartList.Instance;
@@ -555,7 +529,7 @@ namespace PhilsPartHider
                 {
                     string name = ap.name;
                     icon.btnSpawnPart.onClick = new Button.ButtonClickedEvent();
-                    icon.btnSpawnPart.onClick.AddListener(() => pendingUnhide = name);
+                    icon.btnSpawnPart.onClick.AddListener(() => Unhide(name));
                 }
                 var irt = (RectTransform)icon.transform;
                 irt.SetParent(tile, false);
@@ -581,13 +555,12 @@ namespace PhilsPartHider
                 };
 
                 icons.Add(icon);
-                windowIcons.Add(icon);
                 tiles.Add(tile.gameObject);
             }
             LayoutRebuilder.ForceRebuildLayoutImmediate(content);
 
-            RefreshRail(installed.Count);
-            RefreshHead(shown.Count, installed.Count);
+            RefreshRail();
+            RefreshHead(shown.Count);
             RefreshMissing();
             RefreshSort();
             emptyText.gameObject.SetActive(shown.Count == 0);
@@ -603,7 +576,6 @@ namespace PhilsPartHider
 
         void ClearTiles()
         {
-            foreach (EditorPartIcon icon in icons) if (icon != null) windowIcons.Remove(icon);
             foreach (GameObject t in tiles) if (t != null) UnityEngine.Object.Destroy(t);
             icons.Clear();
             tiles.Clear();
@@ -618,7 +590,7 @@ namespace PhilsPartHider
                 PartCategory c = categories.First(k => k.Name == category);
                 result = result.Where(c.Has);
             }
-            string q = search.Trim();
+            string q = Query;
             if (q.Length > 0)
                 result = result.Where(ap => Has(ap.title, q) || Has(ap.name, q) || Has(PartFacts.ModOf(ap), q) ||
                                             Has(ap.manufacturer, q) || Has(CategoryName(ap), q));
@@ -639,28 +611,26 @@ namespace PhilsPartHider
                 case SortKey.Size: primary = (a, b) => a.partSize.CompareTo(b.partSize); break;
                 default: primary = byTitle; break;
             }
+            // Ties go by name, A to Z.
             parts.Sort((a, b) =>
             {
                 int c = primary(a, b);
                 if (!ascending) c = -c;
-                if (c != 0) return c;
-                c = byTitle(a, b);
-                return sort == SortKey.Name && !ascending ? -c : c;
+                return c != 0 ? c : byTitle(a, b);
             });
             return parts;
         }
 
         // ---- Refreshing the rest ----------------------------------------------------
 
-        void RefreshRail(int total)
+        void RefreshRail()
         {
             foreach (CatButton cb in cats)
             {
                 bool selected = cb.Cat == null ? category == null : cb.Cat.Name == category;
-                int n = cb.Cat?.Count ?? total;
+                int n = cb.Cat?.Count ?? installedCount;
                 cb.Btn.On = selected;
                 cb.Btn.Enabled = cb.Cat == null || n > 0;
-                cb.Btn.InkOff = Look.Fade(Look.Ink3, 0.4f);
                 cb.Bar.gameObject.SetActive(selected);
                 if (cb.Badge != null)
                 {
@@ -671,29 +641,27 @@ namespace PhilsPartHider
                     Ui.SetSprite(cb.BadgeBg, selected ? Look.Round(Look.Amber, Look.Amber, 6) : Look.Round(Look.Panel3, Look.Line2, 6));
                     cb.Badge.sizeDelta = new Vector2(Mathf.Max(16, cb.BadgeText.preferredWidth + 8), 15);
                 }
-                cb.Btn.Refresh();
             }
             ShowTip();
         }
 
-        void RefreshHead(int shown, int total)
+        void RefreshHead(int shown)
         {
             heading.text = category ?? "All hidden parts";
-            string q = search.Trim();
+            string q = Query;
             eyebrow.text = q.Length > 0 ? $"{shown} MATCH “{q.ToUpperInvariant()}”" : $"{shown} PART{(shown == 1 ? "" : "S")}";
             pillText.text = $"<b><color={Look.Html(Look.Ink)}>{HiddenList.Count}</color></b> hidden";
             float w = pillText.preferredWidth + 24;
             pill.At(winW - 48 - w, 11, w, 24);
 
             if (shown == 0)
-                emptyText.text = total == 0
+                emptyText.text = installedCount == 0
                     ? $"<size=18><b><color={Look.Html(Look.Ink2)}>Nothing is hidden</color></b></size>\nMiddle-click a part in the parts list to hide it."
                     : $"<size=18><b><color={Look.Html(Look.Ink2)}>Nothing here</color></b></size>\nNo hidden parts {(q.Length > 0 ? "match that search" : "in this category")}.";
         }
 
         void RefreshMissing()
         {
-            List<string> missing = MissingNames();
             bool any = missing.Count > 0;
             missingBar.gameObject.SetActive(any);
             float h = gridH - (any ? MissingH : 0);
@@ -779,7 +747,7 @@ namespace PhilsPartHider
             if (tip == null) return;
             CatButton cb = hoveredCat;
             if (cb == null) { tip.gameObject.SetActive(false); return; }
-            int n = cb.Cat?.Count ?? InstalledCount();
+            int n = cb.Cat?.Count ?? installedCount;
             string name = cb.Cat?.Name ?? "All hidden parts";
             tipText.text = n > 0 ? $"{name}  <color={Look.Html(Look.Ink3)}>{n} hidden</color>" : $"{name}  <color={Look.Html(Look.Ink3)}>nothing hidden</color>";
             float w = tipText.preferredWidth + 20;
@@ -789,36 +757,55 @@ namespace PhilsPartHider
             tip.gameObject.SetActive(true);
         }
 
-        static int InstalledCount() => HiddenList.Names.Count(n => PartLoader.getPartInfoByName(n) != null);
-
         // ---- Actions -------------------------------------------------------------
+        // Each changes the hidden list or a setting; the grid (Update) and the
+        // stock parts list (the addon) catch up on their own.
+
+        // A click on a part brings it back; Undo puts it back where it was in the list.
+        void Unhide(string name)
+        {
+            int index = HiddenList.IndexOf(name);
+            if (!HiddenList.Remove(name)) return;
+            undoName = name;
+            undoIndex = index;
+            undoUntil = Time.unscaledTime + UndoSeconds;
+        }
+
+        void Undo()
+        {
+            if (undoName != null) HiddenList.Insert(undoIndex, undoName);
+            undoName = null;
+        }
+
+        void UnhideAll()
+        {
+            confirmAll = false;
+            undoName = null;
+            int n = HiddenList.Count;
+            HiddenList.RemoveAll(HiddenList.Names);
+            ScreenMessages.PostScreenMessage($"All {n} hidden parts are back in the parts list.", 4f, ScreenMessageStyle.UPPER_CENTER);
+        }
+
+        void Forget() => HiddenList.RemoveAll(missing);
 
         void SelectCategory(CatButton cb)
         {
             category = cb.Cat?.Name;
             confirmAll = false;
-            dirty = true;
         }
 
         void SetSort(SortKey k)
         {
             if (k == sort) ascending = !ascending;
             else { sort = k; ascending = true; }
-            dirty = true;
         }
 
-        void OnSearchChanged(string text)
-        {
-            text = text ?? "";
-            if (text == search) return;
-            search = text;
-            dirty = true;
-        }
+        void OnSearchChanged(string text) => search = text ?? "";
+
+        string Query => search.Trim();
 
         string CategoryName(AvailablePart ap) =>
             categoryOf.TryGetValue(ap, out string name) ? name : ap.category.ToString();
-
-        static List<string> MissingNames() => HiddenList.Names.Where(n => PartLoader.getPartInfoByName(n) == null).ToList();
 
         static bool Has(string text, string q) => !string.IsNullOrEmpty(text) && text.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
     }

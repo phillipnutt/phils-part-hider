@@ -30,11 +30,13 @@ namespace PhilsPartHider
         EditorPartListFilter<AvailablePart> filter;
         ApplicationLauncherButton button;
         HiddenPartsWindow window;
+        int listVersion;
 
         void Start()
         {
             filter = new EditorPartListFilter<AvailablePart>(FilterName, p => !HiddenList.Contains(p.name), "");
             window = new HiddenPartsWindow(() => { if (button != null) button.SetFalse(); else window.Close(); });
+            listVersion = HiddenList.Version;
             StartCoroutine(AddFilterWhenReady());
             GameEvents.onGUIApplicationLauncherReady.Add(AddButton);
             if (ApplicationLauncher.Ready) AddButton();
@@ -59,23 +61,27 @@ namespace PhilsPartHider
 
         void Update()
         {
+            // Middle-click over the window does nothing, so its own icons are never picked here.
             if (Input.GetMouseButtonDown(2) && !window.MouseOver())
             {
                 AvailablePart part = HoveredPartIcon();
                 if (part != null && HiddenList.Add(part.name))
-                {
-                    RefreshPartList();
                     ScreenMessages.PostScreenMessage(
                         $"Hidden: {part.title}. Bring it back from the Part Hider toolbar button.", 4f, ScreenMessageStyle.UPPER_CENTER);
-                }
             }
             window.Update();
+
+            // The one place the parts list catches up with the hidden list, whatever changed it.
+            if (listVersion != HiddenList.Version)
+            {
+                listVersion = HiddenList.Version;
+                if (EditorPartList.Instance != null) EditorPartList.Instance.Refresh();
+            }
         }
 
         void LateUpdate() => window.LateUpdate();
 
-        // The stock parts-list icon under the mouse, if any. Icons in the Hidden
-        // parts window are skipped (middle-click there does nothing).
+        // The stock parts-list icon under the mouse, if any.
         static AvailablePart HoveredPartIcon()
         {
             if (EventSystem.current == null) return null;
@@ -85,14 +91,9 @@ namespace PhilsPartHider
             foreach (RaycastResult hit in hits)
             {
                 EditorPartIcon icon = hit.gameObject.GetComponentInParent<EditorPartIcon>();
-                if (icon != null && icon.partInfo != null && !HiddenPartsWindow.IsWindowIcon(icon)) return icon.partInfo;
+                if (icon != null && icon.partInfo != null) return icon.partInfo;
             }
             return null;
-        }
-
-        public static void RefreshPartList()
-        {
-            if (EditorPartList.Instance != null) EditorPartList.Instance.Refresh();
         }
 
         void OnDestroy()

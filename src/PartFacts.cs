@@ -124,7 +124,10 @@ namespace PhilsPartHider
         {
             string[] profiles = (ap.bulkheadProfiles ?? "").Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
             foreach (string p in profiles)
-                if (p != "srf" && SizeName(p) != null) return SizeName(p);
+            {
+                string size = SizeName(p);
+                if (size != null) return size;
+            }
             if (profiles.Contains("srf")) return "Radial";
             return profiles.Length > 0 ? profiles[0] : "";
         }
@@ -143,7 +146,6 @@ namespace PhilsPartHider
                 case "mk1": return "Mk1";
                 case "mk2": return "Mk2";
                 case "mk3": return "Mk3";
-                case "srf": return "Radial";
                 default: return null;
             }
         }

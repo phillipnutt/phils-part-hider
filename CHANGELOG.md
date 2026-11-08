@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Simpler code inside, no change in what the mod does. Several things were
+  each decided in more than one place; now each has one rule: when the parts
+  list catches up with the hidden list, when the window redraws, which hidden
+  parts are still installed, how buttons are colored, and what a middle-click
+  over the window does. Window buttons now act straight away instead of
+  waiting a frame.
+
 ## 1.0.0 (2026-11-06)
 
 First release.

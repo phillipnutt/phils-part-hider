@@ -148,7 +148,8 @@ namespace PhilsPartHider
     }
 
     // A flat button: a background that changes on hover and when selected, a
-    // label and/or a symbol colored the same way. No Unity tinting.
+    // label and/or a symbol colored the same way. No Unity tinting. Its owner
+    // calls Refresh every frame, which is the only place its look is set.
     public class Btn
     {
         public RectTransform Rt;
@@ -174,14 +175,12 @@ namespace PhilsPartHider
             b.Button.navigation = nav;
             b.Button.onClick.AddListener(() => { if (b.Enabled) onClick?.Invoke(); });
             b.Hover = b.Rt.gameObject.AddComponent<HoverRelay>();
-            b.Hover.Changed = _ => b.Refresh();
             return b;
         }
 
         public Btn WithLabel(string text, Font font, int size, FontStyle style = FontStyle.Normal, TextAnchor align = TextAnchor.MiddleCenter)
         {
             Label = Ui.Label(Ui.Node(Rt, "Label").Stretch(), text, font, size, Ink, align, style);
-            Refresh();
             return this;
         }
 
@@ -190,7 +189,6 @@ namespace PhilsPartHider
             Glyph = Ui.Picture(Ui.Node(Rt, "Glyph"), texture, Ink);
             Glyph.rectTransform.anchorMin = Glyph.rectTransform.anchorMax = Glyph.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             Glyph.rectTransform.sizeDelta = new Vector2(size, size);
-            Refresh();
             return this;
         }
 
@@ -200,7 +198,6 @@ namespace PhilsPartHider
             Hovered = hovered;
             Selected = selected ?? hovered;
             SelectedHover = selectedHover ?? Selected;
-            Refresh();
             return this;
         }
 
@@ -209,7 +206,6 @@ namespace PhilsPartHider
             Ink = ink;
             InkHover = inkHover;
             InkOn = inkOn;
-            Refresh();
             return this;
         }
 

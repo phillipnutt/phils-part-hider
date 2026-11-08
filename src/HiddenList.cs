@@ -36,22 +36,16 @@ namespace PhilsPartHider
             return true;
         }
 
-        public static bool Remove(string name)
-        {
-            EnsureLoaded();
-            if (!set.Remove(name)) return false;
-            order.Remove(name);
-            Changed();
-            return true;
-        }
+        public static bool Remove(string name) => RemoveAll(new[] { name });
 
-        public static void RemoveAll(IEnumerable<string> names)
+        public static bool RemoveAll(IEnumerable<string> names)
         {
             EnsureLoaded();
             bool any = false;
             foreach (string n in new List<string>(names))
                 if (set.Remove(n)) { order.Remove(n); any = true; }
             if (any) Changed();
+            return any;
         }
 
         static void Changed()
