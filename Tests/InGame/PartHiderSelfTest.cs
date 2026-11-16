@@ -172,14 +172,17 @@ public class PartHiderSelfTest : MonoBehaviour
         Check("PH1 Forget them drops the gone part", !HiddenList.Contains(GoneFake));
 
         // ---- PH6: old tiles leave the layout at once when the grid is refilled ------
+        // The refill lays the grid out immediately, while the old tiles still wait to be
+        // destroyed; by the time this runs they're gone, but the new first tile keeps the
+        // place that layout gave it. With old tiles in the way it would sit after them.
         Type sortKey = typeof(HiddenPartsWindow).GetNestedType("SortKey", Any);
+        Vector2 firstCell = ((List<GameObject>)Get(window, "tiles"))[0].GetComponent<RectTransform>().anchoredPosition;
         Call(window, "SetSort", Enum.Parse(sortKey, "Mass"));
         yield return null;      // the add-on's Update refills the grid; this runs right after it, same frame
-        var content = (RectTransform)Get(window, "content");
-        int tiles = ((List<GameObject>)Get(window, "tiles")).Count;
-        int active = content.Cast<Transform>().Count(t => t.gameObject.activeSelf);
-        Check("PH6 a refill doesn't lay new tiles out after the old ones", active == tiles,
-              $"{active} active of {content.childCount} children, {tiles} tiles");
+        var newTiles = (List<GameObject>)Get(window, "tiles");
+        Vector2 newFirst = newTiles[0].GetComponent<RectTransform>().anchoredPosition;
+        Check("PH6 a refill lays the new first tile in the first cell", (newFirst - firstCell).sqrMagnitude < 1f,
+              $"first cell {firstCell}, new first tile at {newFirst}, {newTiles.Count} tiles");
         Call(window, "SetSort", Enum.Parse(sortKey, "Name"));
         yield return Frames(2);
 
