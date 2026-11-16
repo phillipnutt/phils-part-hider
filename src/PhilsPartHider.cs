@@ -39,8 +39,14 @@ namespace PhilsPartHider
             listVersion = HiddenList.Version;
             StartCoroutine(AddFilterWhenReady());
             GameEvents.onGUIApplicationLauncherReady.Add(AddButton);
+            GameEvents.onHideUI.Add(OnHideUI);
+            GameEvents.onShowUI.Add(OnShowUI);
             if (ApplicationLauncher.Ready) AddButton();
         }
+
+        // F2: the window hides with the rest of the UI.
+        void OnHideUI() => window.SetUiHidden(true);
+        void OnShowUI() => window.SetUiHidden(false);
 
         IEnumerator AddFilterWhenReady()
         {
@@ -61,10 +67,10 @@ namespace PhilsPartHider
 
         void Update()
         {
-            // Middle-click over the window does nothing, so its own icons are never picked here.
-            if (Input.GetMouseButtonDown(2) && !window.MouseOver())
+            // Middle-click over the window (or any menu) does nothing: see PartIconAt.
+            if (Input.GetMouseButtonDown(2))
             {
-                AvailablePart part = HoveredPartIcon();
+                AvailablePart part = PartIconAt(Input.mousePosition);
                 if (part != null && HiddenList.Add(part.name))
                     ScreenMessages.PostScreenMessage(
                         $"Hidden: {part.title}. Bring it back from the Part Hider toolbar button.", 4f, ScreenMessageStyle.UPPER_CENTER);
@@ -81,24 +87,26 @@ namespace PhilsPartHider
 
         void LateUpdate() => window.LateUpdate();
 
-        // The stock parts-list icon under the mouse, if any.
-        static AvailablePart HoveredPartIcon()
+        // The stock parts-list icon at a screen point, if any. Only the topmost thing
+        // there counts (not an icon under a menu or dialog), and only an icon in the
+        // parts list itself (not an inventory slot or another mod's window).
+        internal static AvailablePart PartIconAt(Vector2 screenPoint)
         {
-            if (EventSystem.current == null) return null;
-            var pointer = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+            EditorPartList list = EditorPartList.Instance;
+            if (EventSystem.current == null || list == null || list.partGrid == null) return null;
+            var pointer = new PointerEventData(EventSystem.current) { position = screenPoint };
             var hits = new List<RaycastResult>();
             EventSystem.current.RaycastAll(pointer, hits);
-            foreach (RaycastResult hit in hits)
-            {
-                EditorPartIcon icon = hit.gameObject.GetComponentInParent<EditorPartIcon>();
-                if (icon != null && icon.partInfo != null) return icon.partInfo;
-            }
-            return null;
+            if (hits.Count == 0 || hits[0].gameObject == null) return null;
+            EditorPartIcon icon = hits[0].gameObject.GetComponentInParent<EditorPartIcon>();
+            return icon != null && icon.transform.IsChildOf(list.partGrid) ? icon.partInfo : null;
         }
 
         void OnDestroy()
         {
             GameEvents.onGUIApplicationLauncherReady.Remove(AddButton);
+            GameEvents.onHideUI.Remove(OnHideUI);
+            GameEvents.onShowUI.Remove(OnShowUI);
             window?.Close();
             if (button != null && ApplicationLauncher.Instance != null) ApplicationLauncher.Instance.RemoveModApplication(button);
             if (EditorPartList.Instance != null) EditorPartList.Instance.ExcludeFilters.RemoveFilter(filter);

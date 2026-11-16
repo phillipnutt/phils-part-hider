@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+Fixes:
+
+- Middle-click hides a part only when its parts-list icon is the top thing
+  under the mouse: not through a menu or dialog, from an inventory slot, or
+  from another mod's window.
+- F2 hides the Hidden parts window with the rest of the UI. While hidden, it
+  no longer blocks clicks or the camera.
+- "Forget them" no longer drops Phil's Iterative Parts parts that belong to
+  another save (PIP makes its parts per save, so in other saves they look
+  missing).
+- The small corner button on a tile now brings the part back like the rest of
+  the tile, instead of changing that part's default paint everywhere.
+- If the hidden list can't be read, it's kept as
+  `HiddenParts.cfg.unreadable-<date>` before a new list is saved over it.
+- When the window refills, the old tiles leave the layout at once.
+
+Also:
+
 - Simpler code inside, no change in what the mod does. Several things were
   each decided in more than one place; now each has one rule: when the parts
   list catches up with the hidden list, when the window redraws, which hidden

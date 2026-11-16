@@ -25,6 +25,7 @@ namespace PhilsPartHider
         const float UndoSeconds = 6;
         const string LockId = "PhilsPartHiderWindow", TypingLockId = "PhilsPartHiderTyping";
         const string HelpLine = "Click a part to bring it back. Middle-click a part in the parts list to hide it.";
+        const string PipPrefix = "PIP.";    // Phil's Iterative Parts: parts made per save
 
         // While the mouse is over the window: no picking or placing parts on the
         // craft behind it, and the scroll wheel scrolls the window, not the camera.
@@ -93,6 +94,12 @@ namespace PhilsPartHider
         }
 
         public bool IsOpen => root != null;
+
+        // F2 hides the window with the rest of the UI. Hidden, it blocks nothing (MouseOver).
+        public void SetUiHidden(bool hidden)
+        {
+            if (root != null) root.gameObject.SetActive(!hidden);
+        }
 
         // ---- Opening and closing ------------------------------------------------
 
@@ -470,7 +477,7 @@ namespace PhilsPartHider
 
         public bool MouseOver()
         {
-            if (root == null) return false;
+            if (root == null || !root.gameObject.activeInHierarchy) return false;
             Canvas canvas = root.GetComponentInParent<Canvas>();
             Camera cam = canvas != null && canvas.rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.rootCanvas.worldCamera : null;
             return RectTransformUtility.RectangleContainsScreenPoint(root, Input.mousePosition, cam);
@@ -484,13 +491,15 @@ namespace PhilsPartHider
             if (root == null) return;
 
             // Which hidden parts are installed, and which aren't: worked out here only.
+            // PIP's program parts ("PIP.<id>") exist only in the save that made them, so
+            // in another save they aren't missing: they're neither listed nor forgotten.
             var installed = new List<AvailablePart>();
             missing = new List<string>();
             foreach (string n in HiddenList.Names)
             {
                 AvailablePart ap = PartLoader.getPartInfoByName(n);
                 if (ap != null) installed.Add(ap);
-                else missing.Add(n);
+                else if (!n.StartsWith(PipPrefix, StringComparison.Ordinal)) missing.Add(n);
             }
             installedCount = installed.Count;
 
@@ -524,12 +533,14 @@ namespace PhilsPartHider
                 foreach (Image img in icon.GetComponentsInChildren<Image>(true))
                     if (img.GetComponent<Mask>() == null) img.color = Color.clear;
                 foreach (Selectable s in icon.GetComponentsInChildren<Selectable>(true)) s.transition = Selectable.Transition.None;
-                // A click brings the part back instead of picking it up.
-                if (icon.btnSpawnPart != null)
+                // A click anywhere on the tile brings the part back, instead of picking it
+                // up or (the corner button) changing its default paint for every list.
+                string name = ap.name;
+                foreach (Button b in new[] { icon.btnSpawnPart, icon.btnSwapTexture })
                 {
-                    string name = ap.name;
-                    icon.btnSpawnPart.onClick = new Button.ButtonClickedEvent();
-                    icon.btnSpawnPart.onClick.AddListener(() => Unhide(name));
+                    if (b == null) continue;
+                    b.onClick = new Button.ButtonClickedEvent();
+                    b.onClick.AddListener(() => Unhide(name));
                 }
                 var irt = (RectTransform)icon.transform;
                 irt.SetParent(tile, false);
@@ -576,7 +587,10 @@ namespace PhilsPartHider
 
         void ClearTiles()
         {
-            foreach (GameObject t in tiles) if (t != null) UnityEngine.Object.Destroy(t);
+            // Switched off first: Destroy waits for the frame's end, and the new tiles
+            // shouldn't be laid out after the old ones meanwhile.
+            foreach (GameObject t in tiles)
+                if (t != null) { t.SetActive(false); UnityEngine.Object.Destroy(t); }
             icons.Clear();
             tiles.Clear();
             hovered = null;

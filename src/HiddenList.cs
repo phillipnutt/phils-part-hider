@@ -59,17 +59,20 @@ namespace PhilsPartHider
             if (order != null) return;
             order = new List<string>();
             set = new HashSet<string>();
+            if (!File.Exists(FilePath)) return;
             try
             {
-                if (!File.Exists(FilePath)) return;
                 ConfigNode list = ConfigNode.Load(FilePath)?.GetNode("HIDDEN_PARTS");
-                if (list == null) return;
+                if (list == null) throw new InvalidDataException("it has no HIDDEN_PARTS list");
                 foreach (string name in list.GetValues("part"))
                     if (set.Add(name)) order.Add(name);
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[PhilsPartHider] Couldn't read {FilePath}: {e.Message}");
+                // The next change saves over this file, so keep a copy of what couldn't be read.
+                string copy = FilePath + ".unreadable-" + System.DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                try { File.Copy(FilePath, copy); } catch (System.Exception) { copy = "(couldn't copy it)"; }
+                Debug.LogError($"[PhilsPartHider] Couldn't read {FilePath}: {e.Message}. Kept a copy: {copy}");
             }
         }
 
