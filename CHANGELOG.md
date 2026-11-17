@@ -9,9 +9,10 @@ Fixes:
   from another mod's window.
 - F2 hides the Hidden parts window with the rest of the UI. While hidden, it
   no longer blocks clicks or the camera.
-- "Forget them" no longer drops Phil's Iterative Parts parts that belong to
-  another save (PIP makes its parts per save, so in other saves they look
-  missing).
+- Phil's Iterative Parts parts that belong to another save are left to that
+  save (PIP makes its parts per save, so in other saves they look missing).
+  They aren't listed as missing, "Forget them" and "Unhide all" keep them
+  hidden, and the "N hidden" count leaves them out.
 - The small corner button on a tile now brings the part back like the rest of
   the tile, instead of changing that part's default paint everywhere.
 - If the hidden list can't be read, it's kept as

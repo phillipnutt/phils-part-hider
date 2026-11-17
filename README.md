@@ -41,6 +41,10 @@ closed) to unhide that part. To start over, delete the file. If you remove a mod
 whose parts you had hidden, the window lists those names as not installed, with
 a button to forget them.
 
+Phil's Iterative Parts makes its parts per save. A PIP part you hid in one save
+stays hidden there, and the other saves leave it alone: it isn't counted, listed
+as not installed, forgotten or brought back by **Unhide all** there.
+
 ## Building
 
 MSBuild on `PhilsPartHider.csproj`. It expects KSP at the default Steam

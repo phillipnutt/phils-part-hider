@@ -77,6 +77,7 @@ namespace PhilsPartHider
 
         string shownKey;                        // what the grid was last filled for (ViewKey)
         List<string> missing = new List<string>();  // hidden names with no part installed
+        List<string> thisSave = new List<string>(); // hidden names that belong to this save (the count, Unhide all)
         int installedCount;                     // hidden parts that are installed
         AvailablePart hovered;
         CatButton hoveredCat;
@@ -492,14 +493,18 @@ namespace PhilsPartHider
 
             // Which hidden parts are installed, and which aren't: worked out here only.
             // PIP's program parts ("PIP.<id>") exist only in the save that made them, so
-            // in another save they aren't missing: they're neither listed nor forgotten.
+            // in another save they belong to that save: not listed as missing, not
+            // counted, and left alone by Forget and Unhide all.
             var installed = new List<AvailablePart>();
             missing = new List<string>();
+            thisSave = new List<string>();
             foreach (string n in HiddenList.Names)
             {
                 AvailablePart ap = PartLoader.getPartInfoByName(n);
                 if (ap != null) installed.Add(ap);
-                else if (!n.StartsWith(PipPrefix, StringComparison.Ordinal)) missing.Add(n);
+                else if (n.StartsWith(PipPrefix, StringComparison.Ordinal)) continue;
+                else missing.Add(n);
+                thisSave.Add(n);
             }
             installedCount = installed.Count;
 
@@ -664,7 +669,7 @@ namespace PhilsPartHider
             heading.text = category ?? "All hidden parts";
             string q = Query;
             eyebrow.text = q.Length > 0 ? $"{shown} MATCH “{q.ToUpperInvariant()}”" : $"{shown} PART{(shown == 1 ? "" : "S")}";
-            pillText.text = $"<b><color={Look.Html(Look.Ink)}>{HiddenList.Count}</color></b> hidden";
+            pillText.text = $"<b><color={Look.Html(Look.Ink)}>{thisSave.Count}</color></b> hidden";
             float w = pillText.preferredWidth + 24;
             pill.At(winW - 48 - w, 11, w, 24);
 
@@ -711,14 +716,14 @@ namespace PhilsPartHider
         void RefreshFoot()
         {
             if (undoName != null && Time.unscaledTime >= undoUntil) undoName = null;
-            if (confirmAll && HiddenList.Count == 0) confirmAll = false;
+            if (confirmAll && thisSave.Count == 0) confirmAll = false;
             bool undo = undoName != null && hovered == null;
             // Lay the bar out again only when what it shows changes.
-            string key = $"{hovered?.name}|{(undo ? undoName : "")}|{confirmAll}|{HiddenList.Count}";
+            string key = $"{hovered?.name}|{(undo ? undoName : "")}|{confirmAll}|{thisSave.Count}";
             if (key == footKey) return;
             footKey = key;
 
-            if (confirmAll) confirmText.text = $"Bring back all {HiddenList.Count}?";
+            if (confirmAll) confirmText.text = $"Bring back all {thisSave.Count}?";
             float right = mainW - 1 - 14;
             float rightW = confirmAll ? 96 + 8 + 100 + 8 + Mathf.Min(150, confirmText.preferredWidth) : 106;
             float infoW = right - rightW - 16 - 14;
@@ -748,7 +753,7 @@ namespace PhilsPartHider
             help.rectTransform.At(16, 0, infoW, FootH - 1);
             undoButton.Rt.At(16 + titleW + 8, 15, 48, 30);
 
-            unhideAllButton.Enabled = HiddenList.Count > 0;
+            unhideAllButton.Enabled = thisSave.Count > 0;
             unhideAllButton.Rt.gameObject.SetActive(!confirmAll);
             confirmButton.Rt.gameObject.SetActive(confirmAll);
             keepButton.Rt.gameObject.SetActive(confirmAll);
@@ -795,8 +800,8 @@ namespace PhilsPartHider
         {
             confirmAll = false;
             undoName = null;
-            int n = HiddenList.Count;
-            HiddenList.RemoveAll(HiddenList.Names);
+            int n = thisSave.Count;
+            HiddenList.RemoveAll(thisSave);
             ScreenMessages.PostScreenMessage($"All {n} hidden parts are back in the parts list.", 4f, ScreenMessageStyle.UPPER_CENTER);
         }
 
