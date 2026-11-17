@@ -71,6 +71,7 @@ try {
 finally {
     # 4. Put the install back.
     Remove-Item $testMod, $testDir, $save -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $KspRoot 'thumbs\zz_PartHiderSelfTest_*') -Force -Confirm:$false -ErrorAction SilentlyContinue
     if (-not $KeepBuild) { Copy-Item (Join-Path $backup 'PhilsPartHider.dll') (Join-Path $mod 'Plugins\PhilsPartHider.dll') -Force }
     if ($hadList) { Copy-Item (Join-Path $backup 'HiddenParts.cfg') $list -Force }
 }

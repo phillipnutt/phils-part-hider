@@ -172,15 +172,27 @@ public class PartHiderSelfTest : MonoBehaviour
         Check("PH1 Forget them drops the gone part", !HiddenList.Contains(GoneFake));
 
         // ---- PH6: old tiles leave the layout at once when the grid is refilled ------
-        // The refill lays the grid out immediately, while the old tiles still wait to be
-        // destroyed; by the time this runs they're gone, but the new first tile keeps the
-        // place that layout gave it. With old tiles in the way it would sit after them.
+        // Destroy waits for the frame's end, but the refill lays the grid out at once.
+        // The refill is run here and measured straight after, in the same frame, so
+        // nothing else lays the grid out in between.
         Type sortKey = typeof(HiddenPartsWindow).GetNestedType("SortKey", Any);
-        Vector2 firstCell = ((List<GameObject>)Get(window, "tiles"))[0].GetComponent<RectTransform>().anchoredPosition;
+        var content = (RectTransform)Get(window, "content");
+        Vector2 firstCell = FirstTile(window);
+        // Control: a stand-in that's only destroyed, the way the old tiles were, still
+        // pushes the new tiles along. Shows this measure can see the fault.
+        var standIn = new GameObject("zzSelfTestStandIn", typeof(RectTransform));
+        standIn.transform.SetParent(content, false);
+        standIn.transform.SetAsFirstSibling();
+        Destroy(standIn);
+        Call(window, "Populate");
+        Vector2 pushed = FirstTile(window);
+        Check("PH6 control: a tile that's only destroyed still pushes the new ones along", (pushed - firstCell).sqrMagnitude >= 1f,
+              $"first cell {firstCell}, new first tile at {pushed}");
+        yield return Frames(2);
         Call(window, "SetSort", Enum.Parse(sortKey, "Mass"));
-        yield return null;      // the add-on's Update refills the grid; this runs right after it, same frame
+        Call(window, "Populate");
         var newTiles = (List<GameObject>)Get(window, "tiles");
-        Vector2 newFirst = newTiles[0].GetComponent<RectTransform>().anchoredPosition;
+        Vector2 newFirst = FirstTile(window);
         Check("PH6 a refill lays the new first tile in the first cell", (newFirst - firstCell).sqrMagnitude < 1f,
               $"first cell {firstCell}, new first tile at {newFirst}, {newTiles.Count} tiles");
         Call(window, "SetSort", Enum.Parse(sortKey, "Name"));
@@ -213,6 +225,28 @@ public class PartHiderSelfTest : MonoBehaviour
         GameEvents.onShowUI.Fire();
         yield return Frames(2);
         Check("PH3 F2 again shows it", root.gameObject.activeInHierarchy);
+
+        // ---- Per save: the "N hidden" count and Unhide all leave other saves' PIP parts alone
+        HiddenList.Add(first.name);
+        HiddenList.Add(GoneFake);
+        yield return Frames(3);
+        Func<string, bool> otherSave = n => n.StartsWith("PIP.", StringComparison.Ordinal) && PartLoader.getPartInfoByName(n) == null;
+        int ours = HiddenList.Names.Count(n => !otherSave(n));
+        var pillText = (UnityEngine.UI.Text)Get(window, "pillText");
+        var confirmText = (UnityEngine.UI.Text)Get(window, "confirmText");
+        Check("per save: the other save's PIP part is still on the list", HiddenList.Contains(PipFake), HiddenList.Count + " on the list");
+        Check("per save: the count leaves out the other save's PIP part", ShownCount(pillText) == ours && ours < HiddenList.Count,
+              $"shows {ShownCount(pillText)}, {ours} of {HiddenList.Count} are this save's");
+        Set(window, "confirmAll", true);
+        yield return Frames(2);
+        Check("per save: Unhide all asks about this save's parts only", confirmText.text == $"Bring back all {ours}?", confirmText.text);
+        Call(window, "UnhideAll");
+        yield return Frames(3);
+        Check("per save: Unhide all keeps the other save's PIP part hidden", HiddenList.Contains(PipFake));
+        Check("per save: Unhide all brings this save's parts back", !HiddenList.Contains(first.name) && InPartsList(first), first.name);
+        Check("per save: Unhide all still clears a part whose mod is gone", !HiddenList.Contains(GoneFake));
+        Check("per save: the count then shows 0", ShownCount(pillText) == 0 && HiddenList.Count > 0,
+              $"shows {ShownCount(pillText)}, {HiddenList.Count} on the list");
 
         window.Close();
         yield return Frames(2);
@@ -267,6 +301,16 @@ public class PartHiderSelfTest : MonoBehaviour
         return RectTransformUtility.WorldToScreenPoint(cam, rt.TransformPoint(rt.rect.center));
     }
 
+    static Vector2 FirstTile(HiddenPartsWindow window) =>
+        ((List<GameObject>)Get(window, "tiles"))[0].GetComponent<RectTransform>().anchoredPosition;
+
+    // The number in the title bar's "N hidden".
+    static int ShownCount(UnityEngine.UI.Text pill)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(pill.text, @">(\d+)</color></b> hidden");
+        return m.Success ? int.Parse(m.Groups[1].Value) : -1;
+    }
+
     static string TopHit(Vector2 point)
     {
         var hits = new List<RaycastResult>();
@@ -294,6 +338,8 @@ public class PartHiderSelfTest : MonoBehaviour
         FieldInfo f = t.GetField(name, Any);
         return f != null ? f.GetValue(o) : t.GetProperty(name, Any)?.GetValue(o);
     }
+
+    static void Set(object o, string name, object value) => o.GetType().GetField(name, Any).SetValue(o, value);
 
     static object Call(object o, string name, params object[] args) => o.GetType().GetMethod(name, Any).Invoke(o, args);
 }
